@@ -1,0 +1,387 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentEnvironment": {
+            "type": "string",
+            "allowedValues": [
+                "test",
+                "dev",
+                "sst",
+                "val",
+                "prod"
+            ],
+            "metadata": {
+                "description": "Environment type for deployment (dev/sst/val/prod)"
+            }
+        },
+        "deploymentLocation": {
+            "type": "string",
+            "allowedValues": [
+                "se", // swedencentral
+                "eu" // westeurope
+            ],
+            "defaultValue": "eu",
+            "metadata": {
+                "description": "Short form of resourceGroup().location."
+            }
+        },
+        "deploymentName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the deployment (application, service)."
+            }
+        },
+        "dnsPrefix": {
+            "type": "string",
+            "metadata": {
+                "description": "Optional DNS prefix to use with hosted Kubernetes API server FQDN."
+            }
+        },
+        "osDiskSizeGB": {
+            "type": "int",
+            "defaultValue": 0,
+            "metadata": {
+                "description": "Disk size (in GiB) to provision for each of the agent pool nodes. This value ranges from 0 to 1023. Specifying 0 will apply the default disk size for that agentVMSize."
+            },
+            "minValue": 0,
+            "maxValue": 1023
+        },
+        "kubernetesVersion": {
+            "type": "string",
+            "defaultValue": "1.20.9",
+            "metadata": {
+                "description": "The version of Kubernetes."
+            }
+        },
+        "networkPlugin": {
+            "type": "string",
+            "defaultValue": "azure",
+            "allowedValues": [
+                "azure",
+                "kubenet"
+            ],
+            "metadata": {
+                "description": "Network plugin used for building Kubernetes network."
+            }
+        },
+        "enableRBAC": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Boolean flag to turn on and off of RBAC."
+            }
+        },
+        "enablePrivateCluster": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Enable private network access to the Kubernetes cluster."
+            }
+        },
+        "enableHttpApplicationRouting": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Boolean flag to turn on and off (experimental non-production) http application routing."
+            }
+        },
+        "enableAzurePolicy": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Boolean flag to turn on and off Azure Policy addon."
+            }
+        },
+        "networkPolicy": {
+            "type": "string",
+            "metadata": {
+                "description": "Network policy used for building Kubernetes network."
+            }
+        },
+        /*
+            TODO
+            Get all target* parameters from vnet deployment output.
+            az deployment group show --resource-group rg-eu-test-vnet --name vnet --query properties.outputs.nodeSubnetName
+        */
+        "targetResourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource group of vnet where cluster is deployed"
+            }
+        },
+        "targetVnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Vnet where cluster is deployed"
+            }
+        },
+        "targetUserNodePoolSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Subnet where user nodes are deployed"
+            }
+        },
+        "targetSystemNodePoolSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Subnet where system nodes are deployed"
+            }
+        },
+        // serviceSubnetID not supported (for security reasons?!?)
+        "serviceCidr": {
+            "type": "string",
+            "metadata": {
+                "description": "A CIDR notation IP range from which to assign service cluster IPs."
+            }
+        },
+        "dnsServiceIP": {
+            "type": "string",
+            "metadata": {
+                "description": "Containers DNS server IP address."
+            }
+        },
+        "dockerBridgeCidr": {
+            "type": "string",
+            "metadata": {
+                "description": "A CIDR notation IP for Docker bridge."
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "locationEnvironmentDeployment": "[concat(parameters('deploymentLocation'),'-',parameters('deploymentEnvironment'),'-',parameters('deploymentName'))]",
+        "miResourceGroupId": "[resourceGroup().id]",
+        "miResourceGroupName": "[resourceGroup().name]",
+        "aksClusterName": "[concat('aks-',variables('locationEnvironmentDeployment'))]",
+        "nodeResourceGroupName": "[concat(resourceGroup().name, '-nodeResources')]",
+        "managedIdentityName": "[concat('mi-', variables('locationEnvironmentDeployment'))]",
+        "managedIdentityId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities',variables('managedIdentityName'))]",
+        "userNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-vnet-kubernetes-usernodes')]",
+        "userNodeSubnetId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('targetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('targetVnetName'), '/subnets/', variables('userNodeSubnetName'))]",
+        "systemNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-vnet-kubernetes-systemnodes')]",
+        "systemNodeSubnetId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('targetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('targetVnetName'), '/subnets/', variables('systemNodeSubnetName'))]",
+        // TODO: Make subnet and dns assignments based target environment
+        "testServiceCidr": "value",
+        "testDnsServiceIp": "value",
+        "devServiceCidr": "value",
+        "devDnsServiceIp": "value",
+        "sstServiceCidr": "value",
+        "sstDnsServiceIp": "value",
+        "valServiceCidr": "value",
+        "valDnsServiceIp": "value",
+        "prodServiceCidr": "value",
+        "prodDnsServiceIp": "value"
+    },
+    "resources": [
+        {
+            // TODO: Nested assignment
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "name": "[variables('managedIdentityName')]",
+            "apiVersion": "2018-11-30",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "name": "nestedRoleAssignment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+            ],
+            "resourceGroup": "[parameters('targetResourceGroupName')]",
+            "properties": {
+                "expressionEvaluationOptions": {
+                    "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                    "miResourceGroupName": {
+                        "value": "[variables('miResourceGroupName')]"
+                    },
+                    "vnetName": {
+                        "value": "[parameters('targetVnetName')]"
+                    },
+                    "miClusterIdentity": {
+                        "value": "[variables('managedIdentityName')]"
+                    }
+                },
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "vnetRoleGuid": {
+                            "type": "string",
+                            "defaultValue": "[newGuid()]",
+                            "metadata": {
+                                "description": "Role assignment GUID for MI to access vnet"
+                            }
+                        },
+                        "miResourceGroupName": {
+                            "type": "string",
+                            "metadata": {
+                                "description": "ID of resource group where cluster managed identity is"
+                            }
+                        },
+                        "vnetName": {
+                            "type": "string",
+                            "metadata": {
+                                "description": "Name of virtual network where <managed identity> is granted <role>"
+                            }
+                        },
+                        "miClusterIdentity": {
+                            "type": "string",
+                            "metadata": {
+                                "description": "Managed identity to be assigned Network.Contributor role on vnet"
+                            }
+                        }
+                    },
+                    "variables": {},
+                    "resources": [
+                        {
+                            "type": "Microsoft.Authorization/roleAssignments",
+                            "apiVersion": "2021-04-01-preview",
+                            "name": "[parameters('vnetRoleGuid')]",
+                            "scope": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]",
+                            "properties": {
+                                "roleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '4d97b98b-1d4f-4787-a291-c67834d212e7')]",
+                                "principalId": "[
+                                    reference(
+                                        concat(
+                                            subscription().id,
+                                            '/resourcegroups/',
+                                            parameters('miResourceGroupName'),
+                                            '/providers/Microsoft.ManagedIdentity/userAssignedIdentities/',
+                                            parameters('miClusterIdentity')
+                                        ),
+                                        '2021-09-30-preview',
+                                        'Full'
+                                    ).properties.principalId
+                                ]"
+                            }
+                        }
+                    ],
+                    "outputs": {}
+                }
+            }
+        },
+        {
+            // TODO: Nested assignment
+            "apiVersion": "2021-02-01",
+            "type": "Microsoft.ContainerService/managedClusters",
+            "location": "[resourceGroup().location]",
+            "name": "[variables('aksClusterName')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+            ],
+            "properties": {
+                "kubernetesVersion": "[parameters('kubernetesVersion')]",
+                "enableRBAC": "[parameters('enableRBAC')]",
+                "dnsPrefix": "[parameters('dnsPrefix')]",
+                "nodeResourceGroup": "[variables('nodeResourceGroupName')]",
+                "agentPoolProfiles": [
+                    {
+                        "name": "systempool",
+                        "nodeTaints": [
+                            "CriticalAddonsOnly=true:NoSchedule"
+                        ],
+                        "osDiskSizeGB": "[parameters('osDiskSizeGB')]",
+                        "count": 1,
+                        "enableAutoScaling": true,
+                        "minCount": 1,
+                        "maxCount": 3,
+                        "vmSize": "Standard_DS2_v2",
+                        "osType": "Linux",
+                        "storageProfile": "ManagedDisks",
+                        "type": "VirtualMachineScaleSets",
+                        "mode": "System",
+                        "maxPods": 110,
+                        "availabilityZones": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "vnetSubnetID": "[variables('systemNodeSubnetID')]"
+                        //"podSubnetID": "[variables('podSubnetID')]" // not supported in swedencentral as of 2021-12-13
+                    },
+                    {
+                        "name": "userpool",
+                        "osDiskSizeGB": "[parameters('osDiskSizeGB')]",
+                        "count": 0,
+                        "enableAutoScaling": true,
+                        "minCount": 0,
+                        "maxCount": 10,
+                        "vmSize": "Standard_DS2_v2",
+                        "osType": "Linux",
+                        "storageProfile": "ManagedDisks",
+                        "type": "VirtualMachineScaleSets",
+                        "mode": "User",
+                        "maxPods": 110,
+                        "availabilityZones": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "vnetSubnetID": "[variables('UserNodeSubnetID')]"
+                        //"podSubnetID": "[variables('podSubnetID')]" // not supported in swedencentral as of 2021-12-13
+                    }
+                ],
+                "networkProfile": {
+                    "loadBalancerProfile": {
+                        "managedOutboundIPs": {
+                            "count": 1
+                        }
+                    },
+                    "loadBalancerSku": "standard",
+                    "networkPlugin": "[parameters('networkPlugin')]",
+                    "networkPolicy": "[parameters('networkPolicy')]",
+                    "serviceCidr": "[parameters('serviceCidr')]",
+                    "dnsServiceIP": "[parameters('dnsServiceIP')]",
+                    "dockerBridgeCidr": "[parameters('dockerBridgeCidr')]"
+                },
+                "apiServerAccessProfile": {
+                    "enablePrivateCluster": "[parameters('enablePrivateCluster')]"
+                },
+                "addonProfiles": {
+                    "httpApplicationRouting": {
+                        "enabled": "[parameters('enableHttpApplicationRouting')]"
+                    },
+                    "azurepolicy": {
+                        "enabled": "[parameters('enableAzurePolicy')]"
+                    }
+                },
+                "autoScalerProfile": {
+                    "balance-similar-node-groups": "false",
+                    "expander": "random",
+                    "max-empty-bulk-delete": "10",
+                    "max-graceful-termination-sec": "600",
+                    "max-node-provision-time": "15m",
+                    "max-total-unready-percentage": "45",
+                    "new-pod-scale-up-delay": "0s",
+                    "ok-total-unready-count": "3",
+                    "scale-down-delay-after-add": "10m",
+                    "scale-down-delay-after-delete": "10s",
+                    "scale-down-delay-after-failure": "3m",
+                    "scale-down-unneeded-time": "10m",
+                    "scale-down-unready-time": "20m",
+                    "scale-down-utilization-threshold": "0.5",
+                    "scan-interval": "10s",
+                    "skip-nodes-with-local-storage": "false",
+                    "skip-nodes-with-system-pods": "true"
+                }
+            },
+            "tags": {},
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/Microsoft.ManagedIdentity/userAssignedIdentities/', variables('managedIdentityName'))]": {}
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "controlPlaneFQDN": {
+            "type": "string",
+            "value": "[reference(concat('Microsoft.ContainerService/managedClusters/', variables('aksClusterName'))).fqdn]"
+        }
+    }
+}

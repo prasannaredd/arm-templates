@@ -1,0 +1,233 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentEnvironment": {
+            "type": "string",
+            "allowedValues": [
+                "test",
+                "dev",
+                "sst",
+                "val",
+                "prod"
+            ],
+            "metadata": {
+                "description": "Environment for deployment"
+            }
+        },
+        "deploymentLocation": {
+            "type": "string",
+            "allowedValues": [
+                "se", // swedencentral
+                "eu" // westeurope
+            ],
+            "defaultValue": "eu",
+            "metadata": {
+                "description": "Short form of resourceGroup().location."
+            }
+        },
+        "deploymentName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the deployment (application, service)."
+            }
+        },
+        "vnetAddressPrefix": {
+            "type": "string",
+            // "defaultValue": "10.0.0.0/11",
+            "allowedValues": [
+                "10.0.0.0/11",
+                "10.32.0.0/11",
+                "10.64.0.0/11",
+                "10.96.0.0/11",
+                "10.128.0.0/11",
+                "10.160.0.0/11",
+                "10.192.0.0/11",
+                "10.224.0.0/11"
+            ],
+            "metadata": {
+                "description": "Virtual network address prefix in CIDR format."
+            }
+        },
+        "subnetDefaultAddressPrefix": {
+            "type": "string",
+            "metadata": {
+                "description": "Provide a valid default subnet (CIDR) within the selected vnet address space."
+            }
+        },
+        "subnetKubernetesServiceAddressPrefix": {
+            "type": "string",
+            "defaultValue": "null",
+            "metadata": {
+                "description": "Provide an OPTIONAL valid kubernetes service subnet (CIDR) within the selected vnet address space"
+            }
+        },
+        "subnetKubernetesSystemNodePoolAddressPrefix": {
+            "type": "string",
+            "defaultValue": "null",
+            "metadata": {
+                "description": "Provide an OPTIONAL valid kubernetes system node subnet (CIDR) within the selected vnet address space"
+            }
+        },
+        "subnetKubernetesUserNodePoolAddressPrefix": {
+            "type": "string",
+            "defaultValue": "null",
+            "metadata": {
+                "description": "Provide an OPTIONAL valid kubernetes user subnet (CIDR) within the selected vnet address space"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "vnetName": "[concat('vn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'))]",
+        "routetableName": "[concat('rt-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'))]",
+        "subnetDefaultName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'), '-default')]",
+        "subnetKubernetesSystemNodePoolName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'), '-kubernetes-systemnodes')]",
+        "subnetKubernetesUserNodePoolName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'), '-kubernetes-usernodes')]",
+        "subnetKubernetesServiceName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-', parameters('deploymentName'), '-kubernetes-services')]",
+        "serviceCIDR": "[parameters('subnetKubernetesServiceAddressPrefix')]"
+    },
+    "resources": [
+        {
+            "name": "[variables('routetableName')]",
+            "type": "Microsoft.Network/routeTables",
+            "apiVersion": "2020-11-01",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "[variables('routetableName')]"
+            },
+            "properties": {
+                "routes": [],
+                "disableBgpRoutePropagation": false
+            }
+        },
+        {
+            "name": "[variables('vnetName')]",
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2020-11-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/routeTables', variables('routetableName'))]"
+            ],
+            "tags": {
+                "displayName": "[variables('vnetName')]"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vnetAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('subnetDefaultName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnetDefaultAddressPrefix')]",
+                            "routeTable": {
+                                "id": "[resourceId('Microsoft.Network/routeTables', variables('routetableName'))]"
+                            },
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        }
+                    }
+                ],
+                "virtualNetworkPeerings": [],
+                "enableDdosProtection": false
+            },
+            "resources": [
+                {
+                    "condition": "[not(equals(parameters('subnetKubernetesSystemNodePoolAddressPrefix'), 'null'))]",
+                    "name": "[variables('subnetKubernetesSystemNodePoolName')]",
+                    "type": "subnets",
+                    "apiVersion": "2020-11-01",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+                    ],
+                    "properties": {
+                        "addressPrefix": "[parameters('subnetKubernetesSystemNodePoolAddressPrefix')]",
+                        "routeTable": {
+                            "id": "[resourceId('Microsoft.Network/routeTables', variables('routetableName'))]"
+                        },
+                        "delegations": [],
+                        "privateEndpointNetworkPolicies": "Enabled",
+                        "privateLinkServiceNetworkPolicies": "Enabled"
+                    }
+                },
+                {
+                    "condition": "[not(equals(parameters('subnetKubernetesUserNodePoolAddressPrefix'), 'null'))]",
+                    "name": "[variables('subnetKubernetesUserNodePoolName')]",
+                    "type": "subnets",
+                    "apiVersion": "2020-11-01",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+                        "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetKubernetesSystemNodePoolName'))]"
+                    ],
+                    "properties": {
+                        "addressPrefix": "[parameters('subnetKubernetesUserNodePoolAddressPrefix')]",
+                        "routeTable": {
+                            "id": "[resourceId('Microsoft.Network/routeTables', variables('routetableName'))]"
+                        },
+                        "delegations": [],
+                        "privateEndpointNetworkPolicies": "Enabled",
+                        "privateLinkServiceNetworkPolicies": "Enabled"
+                    }
+                }
+            ]
+        }
+    ],
+    "outputs": {
+        "routeTableName": {
+            "type": "string",
+            "value": "[variables('routetableName')]"
+        },
+        "vnetName": {
+            "type": "string",
+            "value": "[variables('vnetName')]"
+        },
+        "vnetId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+        },
+        "defaultSubnetName": {
+            "type": "string",
+            "value": "[variables('subnetDefaultName')]"
+        },
+        "defaultSubnetId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetDefaultName'))]"
+        },
+        "systemNodeSubnetName": {
+            "condition": "[not(equals(parameters('subnetKubernetesSystemNodePoolAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[variables('subnetKubernetesSystemNodePoolName')]"
+        },
+        "systemNodeSubnetId": {
+            "condition": "[not(equals(parameters('subnetKubernetesSystemNodePoolAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets',variables('vnetName'),variables('subnetKubernetesSystemNodePoolName'))]"
+        },
+        "userNodeSubnetName": {
+            "condition": "[not(equals(parameters('subnetKubernetesUserNodePoolAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[variables('subnetKubernetesUserNodePoolName')]"
+        },
+        "userNodeSubnetId": {
+            "condition": "[not(equals(parameters('subnetKubernetesUserNodePoolAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetKubernetesUserNodePoolName'))]"
+        },
+        "serviceSubnetName": {
+            "condition": "[not(equals(parameters('subnetKubernetesServiceAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[variables('subnetKubernetesServiceName')]"
+        },
+        "serviceSubnetCidr": {
+            "condition": "[not(equals(parameters('subnetKubernetesServiceAddressPrefix'), 'null'))]",
+            "type": "string",
+            "value": "[variables('serviceCIDR')]"
+        }
+    }
+}

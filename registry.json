@@ -1,0 +1,80 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the deployment (application, service)."
+            }
+        },
+        "deploymentEnvironment": {
+            "type": "string",
+            "allowedValues": [
+                "test",  // DevOps IoC lab
+                "dev",   // Development
+                "sst",   // Software System Test
+                "val",   // Validation
+                "prod"   // Production
+            ],
+            "metadata": {
+                "description": "Environment type for deployment (dev/sst/val/prod)."
+            }
+        },
+        "deploymentLocation": {
+            "type": "string",
+            "allowedValues": [
+                "se",  // swedencentral
+                "eu"   // westeurope
+            ],
+            "metadata": {
+                "description": "Short form of resourceGroup().location."
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "containerRegistryName": "[parameters('deploymentName')]"
+    },
+    "resources": [
+        {
+            "name": "[variables('containerRegistryName')]",
+            "type": "Microsoft.ContainerRegistry/registries",
+            "apiVersion": "2021-06-01-preview",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Basic",
+                "tier": "Basic"
+            },
+            "properties": {
+                "adminUserEnabled": true,
+                "policies": {
+                    "quarantinePolicy": {
+                        "status": "disabled"
+                    },
+                    "trustPolicy": {
+                        "type": "Notary",
+                        "status": "disabled"
+                    },
+                    "retentionPolicy": {
+                        "days": 7,
+                        "status": "disabled"
+                    },
+                    "exportPolicy": {
+                        "status": "enabled"
+                    }
+                },
+                "encryption": {
+                    "status": "disabled"
+                },
+                "dataEndpointEnabled": false,
+                "publicNetworkAccess": "Enabled",
+                "networkRuleBypassOptions": "AzureServices",
+                "zoneRedundancy": "Disabled"
+            }
+        }
+
+        // Webhooks
+    ],
+    "outputs": {}
+}

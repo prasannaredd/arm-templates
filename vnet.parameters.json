@@ -1,0 +1,30 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentEnvironment": {
+            "value": "prod"
+        },
+        "deploymentLocation": {
+            "value": "eu"
+        },
+        "deploymentName": {
+            "value": "vnet"
+        },
+        "vnetAddressPrefix": {
+            "value": "10.128.0.0/11"
+        },
+        "subnetDefaultAddressPrefix": {
+            "value": "10.128.0.0/16"
+        },
+        "subnetKubernetesServiceAddressPrefix": {
+            "value": "10.159.0.0/16"
+        },
+        "subnetKubernetesSystemNodePoolAddressPrefix": {
+            "value": "10.158.0.0/16"
+        },
+        "subnetKubernetesUserNodePoolAddressPrefix": {
+            "value": "10.157.0.0/16"
+        }
+    }
+}
