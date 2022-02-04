@@ -3,7 +3,7 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "deploymentEnvironment": {
-            "value": "prod"
+            "value": "test"
         },
         "deploymentLocation": {
             "value": "eu"
@@ -12,7 +12,7 @@
             "value": "kubernetes"
         },
         "dnsPrefix": {
-            "value": "eu-prod-kubernetes-dns"
+            "value": "eu-test-kubernetes-dns"
         },
         "kubernetesVersion": {
             "value": "1.20.9"
@@ -33,22 +33,22 @@
             "value": false
         },
         "targetResourceGroupName": {
-            "value": "rg-eu-prod-vnet"
+            "value": "rg-eu-test-vnet"
         },
         "targetVnetName": {
-            "value": "vn-eu-prod-vnet"
+            "value": "vn-eu-test-vnet"
         },
         "targetUserNodePoolSubnetName": {
-            "value": "sn-eu-prod-vnet-kubernetes-usernodes"
+            "value": "sn-eu-test-kubernetes-usernodes"
         },
         "targetSystemNodePoolSubnetName": {
-            "value": "sn-eu-prod-vnet-kubernetes-systemnodes"
+            "value": "sn-eu-test-kubernetes-systemnodes"
         },
         "serviceCidr": {
-            "value": "10.159.0.0/16"
+            "value": "10.223.0.0/16"
         },
         "dnsServiceIP": {
-            "value": "10.159.0.10"
+            "value": "10.223.0.10"
         },
         "dockerBridgeCidr": {
             "value": "172.17.0.1/16"

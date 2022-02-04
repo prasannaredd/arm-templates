@@ -157,9 +157,9 @@
         "nodeResourceGroupName": "[concat(resourceGroup().name, '-nodeResources')]",
         "managedIdentityName": "[concat('mi-', variables('locationEnvironmentDeployment'))]",
         "managedIdentityId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities',variables('managedIdentityName'))]",
-        "userNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-vnet-kubernetes-usernodes')]",
+        "userNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-kubernetes-usernodes')]",
         "userNodeSubnetId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('targetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('targetVnetName'), '/subnets/', variables('userNodeSubnetName'))]",
-        "systemNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-vnet-kubernetes-systemnodes')]",
+        "systemNodeSubnetName": "[concat('sn-', parameters('deploymentLocation'), '-', parameters('deploymentEnvironment'), '-kubernetes-systemnodes')]",
         "systemNodeSubnetId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', parameters('targetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('targetVnetName'), '/subnets/', variables('systemNodeSubnetName'))]",
         // TODO: Make subnet and dns assignments based target environment
         "testServiceCidr": "value",
@@ -304,13 +304,14 @@
                         //"podSubnetID": "[variables('podSubnetID')]" // not supported in swedencentral as of 2021-12-13
                     },
                     {
-                        "name": "userpool",
+                        "name": "userlarge",
                         "osDiskSizeGB": "[parameters('osDiskSizeGB')]",
+                        "osDiskType": "Ephemeral", // local VM disks for scaling performance
                         "count": 0,
                         "enableAutoScaling": true,
                         "minCount": 0,
-                        "maxCount": 10,
-                        "vmSize": "Standard_DS2_v2",
+                        "maxCount": 12,
+                        "vmSize": "Standard_D8as_v4",
                         "osType": "Linux",
                         "storageProfile": "ManagedDisks",
                         "type": "VirtualMachineScaleSets",
@@ -321,7 +322,7 @@
                             "2",
                             "3"
                         ],
-                        "vnetSubnetID": "[variables('UserNodeSubnetID')]"
+                        "vnetSubnetID": "[variables('userNodeSubnetId')]"
                         //"podSubnetID": "[variables('podSubnetID')]" // not supported in swedencentral as of 2021-12-13
                     }
                 ],
